@@ -8,7 +8,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     const [error, setError] = useState("");
 
     if (!isOpen) return null;
-
+// gi8thao
     const handleUpload = async (e) => {
         e.preventDefault();
         if (!file) {
