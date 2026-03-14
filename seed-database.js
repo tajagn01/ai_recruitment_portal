@@ -1,32 +1,6 @@
-import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-
-const dummyHRUsers = [
-  {
-    email: "sarah.recruiter@vectorhire.com",
-    password: "test123",
-    role: "ADMIN",
-    name: "Sarah Reynolds",
-    designation: "Head of Recruiting",
-    department: "Human Resources",
-  },
-  {
-    email: "james.recruiter@vectorhire.com",
-    password: "test123",
-    role: "MANAGER",
-    name: "James Chen",
-    designation: "Recruiting Manager",
-    department: "Human Resources",
-  },
-  {
-    email: "linda.recruiter@vectorhire.com",
-    password: "test123",
-    role: "MANAGER",
-    name: "Linda Martinez",
-    designation: "Talent Acquisition Manager",
-    department: "Human Resources",
-  },
-];
+// Direct database seeding script
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 const dummyCandidates = [
   {
@@ -149,36 +123,19 @@ const dummyCandidates = [
   },
 ];
 
-export async function POST(req) {
+async function seed() {
   try {
-    // Delete existing candidate data to avoid duplicates
-    await prisma.candidate.deleteMany({});
-
-    // Create or update dummy candidates (using upsert for idempotency)
-    const createdCandidates = await Promise.all(
+    console.log('🌱 Seeding database...');
+    
+    // Clear existing data
+    const deleted = await prisma.candidate.deleteMany({});
+    console.log(`✓ Deleted ${deleted.count} existing candidates`);
+    
+    // Create candidates
+    const created = await Promise.all(
       dummyCandidates.map((c) =>
-        prisma.candidate.upsert({
-          where: { email: c.email },
-          update: {
-            name: c.name,
-            phone: c.phone,
-            skills: c.skills,
-            experienceYears: c.experience,
-            location: c.location,
-            education: c.education,
-            resumeText: c.resumeText,
-            pipelineStatus: c.pipelineStatus,
-            linkedin: c.linkedin,
-            github: c.github,
-            portfolio: c.portfolio,
-            certifications: c.certifications,
-            languages: c.languages,
-            salaryExpectation: c.salaryExpectation,
-            availability: c.availability,
-            candidateScore: c.candidateScore,
-            rating: c.rating,
-          },
-          create: {
+        prisma.candidate.create({
+          data: {
             name: c.name,
             email: c.email,
             phone: c.phone,
@@ -201,16 +158,22 @@ export async function POST(req) {
         })
       )
     );
-
-    return NextResponse.json(
-      {
-        message: `Seeded ${createdCandidates.length} candidates successfully`,
-        candidates: createdCandidates,
-      },
-      { status: 200 }
-    );
-  } catch (err) {
-    console.error("Seed error:", err);
-    return NextResponse.json({ error: "Failed to seed data", details: err.message }, { status: 500 });
+    
+    console.log(`✅ Successfully seeded ${created.length} candidates!`);
+    console.log('\nCandidates created:');
+    created.forEach(c => console.log(`  - ${c.name} (${c.email})`));
+    
+  } catch (error) {
+    console.error('❌ Error seeding database:', error.message);
+    if (error.code === 'P1001') {
+      console.error('\n💡 Database connection failed. Make sure your database is set up.');
+    } else if (error.code === 'P2021') {
+      console.error('\n💡 Table does not exist. Run: npx prisma db push');
+    }
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
   }
 }
+
+seed();

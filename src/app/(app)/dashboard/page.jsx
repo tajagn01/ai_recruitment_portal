@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-const initialFilters = { skills: "", experience: "", location: "" };
+const initialFilters = { skills: "", experience: "", location: "", pipelineStatus: "" };
 
 export default function RecruiterDashboard() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState(initialFilters);
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const stats = useMemo(() => {
     const total = candidates.length;
@@ -18,21 +19,56 @@ export default function RecruiterDashboard() {
     return { total, shortlisted, interviewing };
   }, [candidates]);
 
-  const handleSearch = async () => {
+  const fetchAll = async () => {
     setLoading(true);
+    setError("");
     try {
-      const res = await fetch(`/api/search-candidates?query=${encodeURIComponent(query)}`);
+      const res = await fetch("/api/candidates");
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to fetch candidates");
+      }
       setCandidates(Array.isArray(data) ? data : data.candidates || []);
     } catch (err) {
-      console.error("Search failed", err);
+      console.error("Fetch failed", err);
+      setError(err?.message || "Failed to load candidates. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSearch = async () => {
+    if (!query.trim()) {
+      // If query is empty, fetch all candidates
+      fetchAll();
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/search-candidates?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Search failed");
+      }
+      setCandidates(Array.isArray(data) ? data : data.candidates || []);
+    } catch (err) {
+      console.error("Search failed", err);
+      setError(err?.message || "Search failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
+
   const handleFilter = async () => {
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/filter-candidates", {
         method: "POST",
@@ -40,16 +76,20 @@ export default function RecruiterDashboard() {
         body: JSON.stringify(filters),
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Filter failed");
+      }
       setCandidates(Array.isArray(data) ? data : data.candidates || []);
     } catch (err) {
       console.error("Filter failed", err);
+      setError(err?.message || "Filter failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    handleSearch();
+    fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -62,7 +102,7 @@ export default function RecruiterDashboard() {
       {/* Page heading */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p className="mono-label">Dashboard</p>
+          <p className="mono-label">DASHBOARD</p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-semibold">Recruiter workspace</h1>
           <p className="mt-1 text-sm text-gray-400">
             Search, filter, and act on your entire candidate universe in one place.
@@ -75,6 +115,12 @@ export default function RecruiterDashboard() {
           >
             Upload Resume
           </Link>
+          <button
+            onClick={fetchAll}
+            className="pill bg-white/10 border border-white/15 text-white hover:border-[var(--accent)] hover:scale-105 transition"
+          >
+            Refresh
+          </button>
           <Link
             href="/ai-assistant"
             className="pill bg-white/10 border border-white/20 text-white hover:border-[var(--accent)] hover:scale-105 transition"
@@ -88,10 +134,13 @@ export default function RecruiterDashboard() {
         {/* Filters */}
         <aside className="glass-card rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <p className="mono-label">Filters</p>
+            <p className="mono-label">FILTERS</p>
             <button
               className="text-xs text-gray-300 hover:text-white"
-              onClick={() => setFilters(initialFilters)}
+              onClick={() => {
+                setFilters(initialFilters);
+                fetchAll();
+              }}
             >
               Reset
             </button>
@@ -123,6 +172,21 @@ export default function RecruiterDashboard() {
               className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
             />
           </div>
+          <div className="space-y-3">
+            <label className="text-sm text-gray-200">Pipeline Status</label>
+            <select
+              value={filters.pipelineStatus}
+              onChange={(e) => updateFilter("pipelineStatus", e.target.value)}
+              className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none text-white"
+            >
+              <option value="">All Statuses</option>
+              <option value="Applied">Applied</option>
+              <option value="Shortlisted">Shortlisted</option>
+              <option value="Interview">Interview</option>
+              <option value="Offer">Offer</option>
+              <option value="Hired">Hired</option>
+            </select>
+          </div>
           <button
             onClick={handleFilter}
             className="w-full pill bg-[var(--accent)] text-black font-semibold hover:scale-105 transition"
@@ -136,23 +200,30 @@ export default function RecruiterDashboard() {
           {/* Search + Stats */}
           <div className="glass-card rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="mono-label">Search Candidates</p>
+              <p className="mono-label">SEARCH CANDIDATES</p>
               <span className="pill bg-white/8 text-white text-xs">Live</span>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyPress={handleKeyPress}
                 placeholder="Search candidates (e.g. Python developer)"
                 className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm focus:border-[var(--accent)] focus:outline-none"
               />
               <button
                 onClick={handleSearch}
-                className="pill bg-[var(--accent)] text-black font-semibold hover:scale-105 transition"
+                disabled={loading}
+                className="pill bg-[var(--accent)] text-black font-semibold hover:scale-105 transition disabled:opacity-60"
               >
-                Search
+                {loading ? "Searching..." : "Search"}
               </button>
             </div>
+            {error && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+                <p className="text-sm text-red-300">{error}</p>
+              </div>
+            )}
           </div>
 
           <div className="grid md:grid-cols-3 gap-4">

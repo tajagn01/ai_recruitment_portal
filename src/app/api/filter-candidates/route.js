@@ -13,6 +13,7 @@ export async function POST(req) {
   const skills = (body.skills || "").trim();
   const experience = parseInt(body.experience, 10);
   const location = (body.location || "").trim();
+  const pipelineStatus = (body.pipelineStatus || "").trim();
 
   const skillTokens = skills
     ? skills
@@ -34,6 +35,10 @@ export async function POST(req) {
 
     if (location) {
       where.location = { contains: location, mode: "insensitive" };
+    }
+
+    if (pipelineStatus) {
+      where.pipelineStatus = pipelineStatus;
     }
 
     const candidates = await prisma.candidate.findMany({
