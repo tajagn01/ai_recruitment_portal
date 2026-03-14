@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 const stages = ["Applied", "Shortlisted", "Interview", "Offer", "Hired"];
 
@@ -132,7 +132,7 @@ function ResumeDocument({ text }) {
         </p>
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-400">
           {(sectionMap.CONTACT || []).slice(0, 4).map((line, idx) => (
-            <span key={idx} className="break-all">
+            <span key={idx} className="break-all min-w-0">
               {linkify(line)}
             </span>
           ))}
@@ -163,7 +163,7 @@ function ResumeDocument({ text }) {
                         {isBullet && (
                           <span className="mt-1.5 w-1 h-1 rounded-full bg-white/40 shrink-0" />
                         )}
-                        <p className={`leading-relaxed ${isBullet ? "text-gray-300 text-xs" : "text-gray-200 text-xs"}`}>
+                        <p className={`leading-relaxed wrap-break-word ${isBullet ? "text-gray-300 text-xs" : "text-gray-200 text-xs"}`}>
                           {linkify(cleanLine)}
                         </p>
                       </div>
@@ -181,10 +181,25 @@ function ResumeDocument({ text }) {
 
 export default function CandidateProfilePage() {
   const { id } = useParams();
+  const router = useRouter();
   const [candidate, setCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingStage, setSavingStage] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const deleteCandidate = async () => {
+    if (!confirm(`Delete "${candidate?.name || "this candidate"}" and their resume? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/candidates?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      router.push("/candidates");
+    } catch {
+      setError("Failed to delete candidate. Please try again.");
+      setDeleting(false);
+    }
+  };
 
   const skills = useMemo(
     () => (candidate?.skills || "").split(",").map((s) => s.trim()).filter(Boolean),
@@ -243,8 +258,8 @@ export default function CandidateProfilePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <p className="mono-label">CANDIDATE</p>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-semibold">
-            Curriculum Vitae (CV)
+          <h1 className="mt-1 text-2xl sm:text-3xl font-semibold wrap-break-word">
+            {candidate?.name || "Candidate Profile"}
           </h1>
           <p className="mt-1 text-sm text-gray-400">
             Full profile view with pipeline controls and parsed resume fields.
@@ -263,6 +278,18 @@ export default function CandidateProfilePage() {
           >
             AI Assistant
           </Link>
+          <button
+            type="button"
+            onClick={deleteCandidate}
+            disabled={deleting || loading}
+            className="pill bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition disabled:opacity-40 inline-flex items-center gap-1.5"
+          >
+            {deleting ? (
+              <><span className="w-3 h-3 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />Deleting…</>
+            ) : (
+              <>🗑 Delete</>
+            )}
+          </button>
         </div>
       </div>
 
@@ -290,8 +317,8 @@ export default function CandidateProfilePage() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs uppercase tracking-[0.15em] text-gray-400 mb-1">DETAILS</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{candidate.name || "Unnamed"}</p>
-                  <p className="text-sm text-gray-400 mt-1">{candidate.email || "Email unavailable"}</p>
+                  <p className="mt-1 text-lg font-semibold text-white wrap-break-word">{candidate.name || "Unnamed"}</p>
+                  <p className="text-sm text-gray-400 mt-1 break-all">{candidate.email || "Email unavailable"}</p>
                   {candidate.phone && (
                     <p className="text-xs text-gray-500 mt-1">{candidate.phone}</p>
                   )}
@@ -390,7 +417,7 @@ export default function CandidateProfilePage() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="mono-label mb-3">EDUCATION</p>
-                  <p className="text-sm text-gray-200 min-h-5">
+                  <p className="text-sm text-gray-200 min-h-5 wrap-break-word">
                     {candidate.education || "Not specified"}
                   </p>
                 </div>

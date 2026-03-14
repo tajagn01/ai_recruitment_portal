@@ -12,66 +12,111 @@ async function parsePdfBuffer(buffer) {
     return new Promise((resolve, reject) => {
         const pdfParser = new PDFParser(null, 1);
         pdfParser.on("pdfParser_dataError", errData => reject(errData.parserError));
-        pdfParser.on("pdfParser_dataReady", pdfData => {
+        pdfParser.on("pdfParser_dataReady", () => {
             resolve(pdfParser.getRawTextContent());
         });
         pdfParser.parseBuffer(buffer);
     });
 }
 
-// Smart regex-based resume parser
-// Section headers to skip when looking for the candidate name
-const SECTION_HEADERS = /^(personal\s*information|contact|education|experience|skills|key\s*skills|technical\s*skills|summary|objective|profile|about\s*me|certifications?|projects?|references?|languages?|achievements?|awards?|activities|volunteer|interests?|courses?|training|links|publications?|open\s*source)/i;
+// Section headers to skip when looking for the candidate name (regex fallback only)
+const SECTION_HEADERS = /^(personal\s*information|contact|education|experience|skills|key\s*skills|technical\s*skills|summary|objective|profile|about\s*me|certifications?|projects?|references?|languages?|achievements?|awards?|activities|volunteer|interests?|courses?|training|links|publications?|open\s*source|curriculum\s*vitae|curriculumvitae|resume|^cv$|cover\s*letter)/i;
 
 function cleanLine(line) {
-    // pdf2json sometimes inserts spaces inside words (e.g. "Com puter"). Collapse them.
     return line.replace(/([a-z])\s([a-z])/gi, (_, a, b) => a + b).trim();
 }
 
-function extractResumeData(text) {
+/**
+ * Use Gemini to extract name and email from resume text.
+ * Falls back to regex if API is unavailable or returns nothing useful.
+ */
+async function extractFieldsWithAI(text) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return {};
+
+    const prompt = `Extract candidate contact information from this resume text.
+Return ONLY a JSON object with these fields (use null if not found):
+{
+  "name": "Full Name — never use document titles like Curriculum Vitae or Resume",
+  "email": "email@example.com",
+  "phone": "+91-9999999999 or any phone number",
+  "location": "City, State/Country — e.g. Vadodara, Gujarat or Mumbai, India or New York, USA"
+}
+
+Resume text (first 3000 chars):
+${text.slice(0, 3000)}`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+                }),
+            }
+        );
+        if (!response.ok) return {};
+        const data = await response.json();
+        const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!content) return {};
+        const clean = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+        const parsed = JSON.parse(clean);
+        return {
+            name:     parsed.name     && parsed.name     !== 'null' ? parsed.name     : null,
+            email:    parsed.email    && parsed.email    !== 'null' ? parsed.email    : null,
+            phone:    parsed.phone    && parsed.phone    !== 'null' ? parsed.phone    : null,
+            location: parsed.location && parsed.location !== 'null' ? parsed.location : null,
+        };
+    } catch {
+        return {};
+    }
+}
+
+async function extractResumeData(text) {
     const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-    // ── Email ──────────────────────────────────────────────────────────────────
+    // ── AI-powered extraction (name, email, phone, location) ─────────────────
+    const ai = await extractFieldsWithAI(text);
+
+    // ── Email fallback via regex ───────────────────────────────────────────────
     const emailMatch = text.match(/([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-    const email = emailMatch ? emailMatch[1] : "";
+    const email = ai.email || (emailMatch ? emailMatch[1] : "");
 
-    // ── Phone ──────────────────────────────────────────────────────────────────
+    // ── Phone fallback via regex ───────────────────────────────────────────────
     const phoneMatch = text.match(/(\+?[\d][\d\s\-().]{7,}\d)/);
-    const phone = phoneMatch ? phoneMatch[1].trim() : "";
+    const phone = ai.phone || (phoneMatch ? phoneMatch[1].trim() : "");
 
-    // ── Name ───────────────────────────────────────────────────────────────────
-    // Look in the first 10 lines for a line that:
-    //   • Is not a section header (ALL-CAPS label)
-    //   • Has no digits
-    //   • Has no @ symbol
-    //   • Is 2–5 words long (typical full name)
-    //   • Is not a job title (contains "engineer","developer","manager", etc.)
+    // ── Name fallback via regex (used only if AI returned nothing) ────────────
+    // Use RAW lines (not cleanLine) so "RUDRA BHUNGALIYA" stays as 2 words,
+    // not collapsed into "RUDRABHUNGALIYA" (which would fail the word-count check).
     const titleWords = /engineer|developer|manager|designer|analyst|architect|consultant|specialist|officer|intern|associate|director|lead|senior|junior|staff/i;
-    let name = "";
-    for (const line of rawLines.slice(0, 12)) {
-        const c = cleanLine(line);
-        const wordCount = c.split(/\s+/).length;
+    let regexName = "";
+    for (const line of rawLines.slice(0, 15)) {
+        const wordCount = line.split(/\s+/).length;
         if (
             wordCount >= 2 && wordCount <= 5 &&
-            !c.includes('@') &&
-            !/\d/.test(c) &&
-            !SECTION_HEADERS.test(c) &&
-            !titleWords.test(c) &&
-            c.length >= 4 && c.length <= 60
+            !line.includes('@') &&
+            !line.includes(':') &&          // skip "Frameworks: React, Node.js"
+            !/\d/.test(line) &&
+            !SECTION_HEADERS.test(line) &&
+            !titleWords.test(line) &&
+            line.length >= 4 && line.length <= 60
         ) {
-            name = c;
+            regexName = line;
             break;
         }
     }
-    name = name || "Unknown";
+    const name = ai.name || regexName || "Unknown";
 
-    // ── Location ───────────────────────────────────────────────────────────────
-    // City, ST  /  City, Country  /  label: City, ST
+    // ── Location — AI first, regex fallback ───────────────────────────────────
     const locationMatch =
         text.match(/(?:location|address|based\s+in|city)[:\s]+([A-Z][a-zA-Z\s]+,\s*[A-Z]{2,})/i) ||
         text.match(/\b([A-Z][a-zA-Z\s]+,\s*(?:CO|CA|NY|TX|FL|WA|MA|IL|GA|NC|VA|AZ|OH|PA|NJ|IN|MN|TN|MI|OR|MO|SC|AL|KY|WI|MD|CT|NV|AR|UT|KS|NE|ID|NH|ME|RI|MT|DE|SD|ND|WY|VT|DC|HI|AK))\b/) ||
         text.match(/\b([A-Z][a-zA-Z\s]+,\s*[A-Z][a-zA-Z]+)\b/);
-    const location = locationMatch ? locationMatch[1].trim() : "";
+    const location = ai.location || (locationMatch ? locationMatch[1].trim() : "");
 
     // ── Social links ───────────────────────────────────────────────────────────
     const linkedinMatch = text.match(/(https?:\/\/)?(www\.)?linkedin\.com\/in\/[\w\-]+/i);
@@ -150,8 +195,11 @@ function extractResumeData(text) {
     let education = "Not specified";
     for (let i = 0; i < rawLines.length; i++) {
         if (degreeRe.test(rawLines[i])) {
-            const parts = [cleanLine(rawLines[i])];
-            if (rawLines[i + 1] && !SECTION_HEADERS.test(rawLines[i + 1])) parts.push(cleanLine(rawLines[i + 1]));
+            // Use raw lines — cleanLine() collapses "Bachelor of Technology" → "BachelorofTechnology"
+            const parts = [rawLines[i].trim()];
+            if (rawLines[i + 1] && !SECTION_HEADERS.test(rawLines[i + 1])) {
+                parts.push(rawLines[i + 1].trim());
+            }
             education = parts.join(' — ').substring(0, 200);
             break;
         }
@@ -416,8 +464,8 @@ export async function POST(req) {
                 // Strip null bytes and other non-UTF-8-safe characters that Postgres rejects
                 const textData = rawText.replace(/\x00/g, "").replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 
-                // Smart regex-based parsing (no API needed)
-                const parsedData = extractResumeData(textData);
+                // AI + regex hybrid parsing
+                const parsedData = await extractResumeData(textData);
                 const normalizedText = normalizeResumeText(textData);
                 const resumeHash = hashBuffer(buffer);
                 const contentHash = hashText(normalizedText);

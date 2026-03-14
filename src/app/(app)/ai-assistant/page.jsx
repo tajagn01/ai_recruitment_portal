@@ -20,6 +20,62 @@ const fadeIn = {
   visible: { opacity: 1, y: 0 }
 };
 
+// Render a plain-text markdown string into JSX.
+// Handles: **bold**, → arrows, bullet lines (• / -), blank lines, italic _text_
+function renderMessage(text) {
+  if (!text) return null;
+  return text.split("\n").map((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) return <div key={i} className="h-2" />;
+
+    // Parse inline: **bold** and _italic_
+    const parseInline = (str) => {
+      const parts = [];
+      const re = /\*\*(.+?)\*\*|_(.+?)_/g;
+      let last = 0, m;
+      while ((m = re.exec(str)) !== null) {
+        if (m.index > last) parts.push(str.slice(last, m.index));
+        if (m[1] !== undefined) parts.push(<strong key={m.index} className="text-white font-semibold">{m[1]}</strong>);
+        if (m[2] !== undefined) parts.push(<em key={m.index} className="text-gray-300 italic">{m[2]}</em>);
+        last = re.lastIndex;
+      }
+      if (last < str.length) parts.push(str.slice(last));
+      return parts;
+    };
+
+    // Bullet line
+    if (/^[•\-\*]\s/.test(trimmed)) {
+      return (
+        <div key={i} className="flex gap-2 items-start">
+          <span className="text-[var(--accent)] mt-0.5 shrink-0">•</span>
+          <span>{parseInline(trimmed.replace(/^[•\-\*]\s/, ""))}</span>
+        </div>
+      );
+    }
+
+    // Arrow line (→ candidate entry)
+    if (/^→/.test(trimmed)) {
+      return (
+        <div key={i} className="flex gap-2 items-start pl-1 py-0.5">
+          <span className="text-[var(--accent)] shrink-0">→</span>
+          <span>{parseInline(trimmed.replace(/^→\s*/, ""))}</span>
+        </div>
+      );
+    }
+
+    // Indented detail line (starts with spaces/tabs — skills under a candidate)
+    if (/^\s{2,}/.test(line)) {
+      return (
+        <div key={i} className="pl-5 text-gray-400 text-xs">
+          {parseInline(trimmed)}
+        </div>
+      );
+    }
+
+    return <div key={i}>{parseInline(trimmed)}</div>;
+  });
+}
+
 export default function AiAssistantPage() {
   const [messages, setMessages] = useState([
     {
@@ -29,9 +85,17 @@ export default function AiAssistantPage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [candidates, setCandidates] = useState([]);
   const chatScrollRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Fetch all candidates once for the stats panel
+  useEffect(() => {
+    fetch("/api/candidates")
+      .then((r) => r.json())
+      .then((data) => setCandidates(Array.isArray(data) ? data : data.candidates || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!chatScrollRef.current) return;
@@ -39,7 +103,7 @@ export default function AiAssistantPage() {
       top: chatScrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, candidates]);
+  }, [messages]);
 
   const stats = useMemo(() => {
     const count = candidates.length;
@@ -65,6 +129,9 @@ export default function AiAssistantPage() {
         body: JSON.stringify({ query: query.trim() }),
       });
       const data = await res.json();
+      if (Array.isArray(data.candidates) && data.candidates.length > 0) {
+        setCandidates(data.candidates);
+      }
       setMessages((m) => [
         ...m,
         { role: "assistant", content: data.reply || "Here are the matching candidates I found for you." },
@@ -82,9 +149,6 @@ export default function AiAssistantPage() {
     sendQuery(input);
   };
 
-  // Latest candidates from last assistant message
-  const latestCandidates =
-    [...messages].reverse().find((m) => m.role === "assistant" && m.candidates?.length > 0)?.candidates || [];
 
   return (
     <div className="space-y-8">
@@ -173,7 +237,9 @@ export default function AiAssistantPage() {
                     }`}>
                       {m.role === "assistant" ? "AI Assistant" : "You"}
                     </p>
-                    <p className="text-sm leading-relaxed text-white">{m.content}</p>
+                    <div className="text-sm leading-relaxed text-white space-y-1">
+                      {renderMessage(m.content)}
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -181,7 +247,7 @@ export default function AiAssistantPage() {
           </div>
 
           {/* Input Form */}
-          <form onSubmit={sendMessage} className="space-y-3" suppressHydrationWarning>
+          <form onSubmit={handleSubmit} className="space-y-3" suppressHydrationWarning>
             <div className="flex gap-3">
               <input
                 ref={inputRef}

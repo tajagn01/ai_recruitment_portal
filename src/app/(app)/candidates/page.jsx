@@ -3,19 +3,20 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Users, 
-  Search, 
-  Filter, 
-  RefreshCw, 
-  Upload, 
-  MapPin, 
-  Briefcase, 
-  Code, 
+import {
+  Users,
+  Search,
+  Filter,
+  RefreshCw,
+  Upload,
+  MapPin,
+  Briefcase,
+  Code,
   Mail,
   TrendingUp,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from "lucide-react";
 
 const initialFilters = { skills: "", experience: "", location: "" };
@@ -31,6 +32,21 @@ export default function CandidatesPage() {
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const deleteCandidate = async (id, name) => {
+    if (!confirm(`Delete "${name || "this candidate"}" and their resume? This cannot be undone.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/candidates?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setCandidates((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      alert("Failed to delete candidate. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -289,7 +305,7 @@ export default function CandidatesPage() {
               }}
             >
               <AnimatePresence>
-                {filtered.map((c, idx) => {
+                {filtered.map((c) => {
                   const skills = (c.skills || "")
                     .split(",")
                     .map((s) => s.trim())
@@ -358,13 +374,27 @@ export default function CandidatesPage() {
                         </div>
                       </div>
 
-                      {/* View Profile Button */}
-                      <Link
-                        href={`/candidate/${c.id}`}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-sm font-semibold hover:bg-[var(--accent)] hover:text-black hover:border-[var(--accent)] transition-all group-hover:border-[var(--accent)]/50"
-                      >
-                        View Profile
-                      </Link>
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <Link
+                          href={`/candidate/${c.id}`}
+                          className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-sm font-semibold hover:bg-[var(--accent)] hover:text-black hover:border-[var(--accent)] transition-all group-hover:border-[var(--accent)]/50"
+                        >
+                          View Profile
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => deleteCandidate(c.id, c.name)}
+                          disabled={deletingId === c.id}
+                          className="inline-flex items-center justify-center rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-red-400 hover:bg-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-40"
+                          title="Delete candidate"
+                        >
+                          {deletingId === c.id
+                            ? <RefreshCw className="w-4 h-4 animate-spin" />
+                            : <Trash2 className="w-4 h-4" />
+                          }
+                        </button>
+                      </div>
                     </motion.article>
                   );
                 })}

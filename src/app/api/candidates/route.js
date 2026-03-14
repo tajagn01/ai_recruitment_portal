@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { unlink } from "fs/promises";
+import path from "path";
 export const dynamic = "force-dynamic";
 
 export async function GET(req) {
@@ -43,5 +45,35 @@ export async function PATCH(req) {
         return NextResponse.json(updated, { status: 200 });
     } catch (error) {
         return NextResponse.json({ error: "Failed to update candidate status" }, { status: 500 });
+    }
+}
+
+export async function DELETE(req) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get("id");
+        if (!id) return NextResponse.json({ error: "Missing candidate id" }, { status: 400 });
+
+        // Fetch first so we can delete the resume file from disk
+        const candidate = await prisma.candidate.findUnique({
+            where: { id },
+            select: { resumeFileUrl: true },
+        });
+
+        if (!candidate) return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+
+        // Delete resume file from local disk (ignore errors if file missing)
+        if (candidate.resumeFileUrl) {
+            const filePath = path.join(process.cwd(), "public", candidate.resumeFileUrl);
+            await unlink(filePath).catch(() => {});
+        }
+
+        // Cascade deletes Resume + DeduplicationLog rows via Prisma schema relations
+        await prisma.candidate.delete({ where: { id } });
+
+        return NextResponse.json({ success: true }, { status: 200 });
+    } catch (error) {
+        console.error("Delete Candidate Error:", error);
+        return NextResponse.json({ error: "Failed to delete candidate" }, { status: 500 });
     }
 }
