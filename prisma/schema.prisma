@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Candidate {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  phone           String?
+  skills          String   // Stored as comma separated
+  experienceYears Int      @default(0)
+  location        String?
+  education       String?
+  resumeText      String   // Using String since SQLite text is just String in prisma
+  pipelineStatus  String   @default("Applied")
+  linkedin        String?
+  github          String?
+  portfolio       String?
+  website         String?
+  twitter         String?
+  summary         String?  // Professional summary extract
+  
+  // New Enhanced Fields
+  candidateScore  Int      @default(0)  // 0-100 score based on job match
+  rating          Int?                  // 1-5 star rating by recruiter
+  employmentHistory String?            // JSON: [{"company":"X","role":"Y","duration":"1-2 years"}]
+  certifications  String?              // Comma separated: AWS, Docker, etc.
+  languages       String?              // Comma separated: English, Spanish, etc.
+  salaryExpectation Int?               // Expected salary in dollars
+  availability    String   @default("Available") // Available, 2 weeks notice, 1 month, etc.
+  interviewNotes  String?              // Notes after interview
+  feedback        String?              // HR/Manager feedback
+  rejectionReason String?              // Why candidate was rejected
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
