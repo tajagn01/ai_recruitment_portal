@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -20,6 +20,33 @@ import {
   Play,
   Square,
 } from "lucide-react";
+
+function SyncLog({ lines, running }) {
+  const bottomRef = useRef(null);
+  const rows = (lines || "").split("\n").filter(Boolean);
+
+  useEffect(() => {
+    if (running && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [lines, running]);
+
+  const color = (line) => {
+    if (line.includes("[ERROR]")) return "text-red-400";
+    if (line.includes("[WARN]"))  return "text-yellow-400";
+    if (line.includes("[INFO]"))  return "text-green-400";
+    return "text-gray-400";
+  };
+
+  return (
+    <div className="max-h-56 overflow-y-auto p-4 space-y-0.5 font-mono text-xs">
+      {rows.map((line, i) => (
+        <div key={i} className={color(line)}>{line}</div>
+      ))}
+      <div ref={bottomRef} />
+    </div>
+  );
+}
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -117,22 +144,22 @@ export default function HrProfilePage() {
     load();
   }, []);
 
-  // Poll sync status while running
+  // Poll sync status while running (every 1s for live logs)
   useEffect(() => {
     if (syncStatus !== "running") return;
     const timer = setInterval(async () => {
       try {
         const res = await fetch("/api/email-sync");
         const data = await res.json();
+        if (data.lastSyncMessage) setLastSyncMessage(data.lastSyncMessage);
         if (data.lastSyncStatus && data.lastSyncStatus !== "running") {
           setSyncStatus(data.lastSyncStatus);
           setLastSyncAt(data.lastSyncAt);
-          setLastSyncMessage(data.lastSyncMessage || "");
           setSyncing(false);
           clearInterval(timer);
         }
       } catch { /* silent */ }
-    }, 3000);
+    }, 1000);
     return () => clearInterval(timer);
   }, [syncStatus]);
 
@@ -520,18 +547,28 @@ export default function HrProfilePage() {
               </div>
             </form>
 
-            {/* Sync status footer */}
+            {/* Sync live log terminal */}
             {gmailConnected && (syncStatus || lastSyncAt) && (
-              <div className="mt-6 pt-5 border-t border-white/10 flex flex-wrap items-center gap-3 text-sm text-gray-400">
-                <StatusBadge status={syncStatus} />
-                {lastSyncAt && (
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    Last sync: {new Date(lastSyncAt).toLocaleString()}
-                  </span>
-                )}
-                {lastSyncMessage && syncStatus === "error" && (
-                  <span className="w-full text-xs text-red-400/80 font-mono truncate">{lastSyncMessage}</span>
+              <div className="mt-6 pt-5 border-t border-white/10 space-y-3">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                  <StatusBadge status={syncStatus} />
+                  {lastSyncAt && syncStatus !== "running" && (
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      Last sync: {new Date(lastSyncAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                {lastSyncMessage && (
+                  <div className="rounded-xl bg-black/60 border border-white/10 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border-b border-white/10">
+                      {syncStatus === "running" && <Loader2 className="w-3 h-3 animate-spin text-blue-400" />}
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                        {syncStatus === "running" ? "Syncing…" : "Sync Log"}
+                      </span>
+                    </div>
+                    <SyncLog lines={lastSyncMessage} running={syncStatus === "running"} />
+                  </div>
                 )}
               </div>
             )}
