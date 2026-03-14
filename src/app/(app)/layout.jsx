@@ -49,7 +49,7 @@ export default function AppLayout({ children }) {
   if (!isReady || !user) return null;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-linear-to-b from-[#0b0b0f] via-[#0f0f12] to-black text-white">
+    <div className="relative min-h-screen overflow-hidden bg-linear-to-b from-[#0b0b0f] via-[#0f0f12] to-black text-white" suppressHydrationWarning>
       <div className="magic-grid" aria-hidden />
       <div className="aceternity-spotlight" style={{ top: 40, left: 40 }} aria-hidden />
       <div className="aceternity-spotlight" style={{ bottom: -80, right: 40 }} aria-hidden />
@@ -93,6 +93,7 @@ export default function AppLayout({ children }) {
             <button
               onClick={handleLogout}
               className="w-full text-left text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-xl px-3 py-2.5 transition"
+              suppressHydrationWarning
             >
               Logout
             </button>
@@ -104,25 +105,17 @@ export default function AppLayout({ children }) {
           {/* Header */}
           <header className="flex items-center justify-between border-b border-white/10 px-4 sm:px-6 py-4 backdrop-blur-md bg-black/30">
             <div className="flex items-center gap-3">
+              {/* Mobile menu button - only show on mobile */}
               <button
                 type="button"
-                className="lg:hidden pill border border-white/15 text-xs text-gray-200"
+                className="lg:hidden w-9 h-9 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 flex items-center justify-center transition"
                 onClick={() => router.push("/dashboard")}
+                suppressHydrationWarning
               >
-                VH
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               </button>
-              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
-                <span className="mono-label">Search</span>
-                <div className="flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 py-1">
-                  <span className="rounded border border-white/20 px-1.5 py-0.5 text-[10px]">
-                    Ctrl
-                  </span>
-                  <span className="text-[10px] text-gray-500">+</span>
-                  <span className="rounded border border-white/20 px-1.5 py-0.5 text-[10px]">
-                    K
-                  </span>
-                </div>
-              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -130,34 +123,27 @@ export default function AppLayout({ children }) {
               <div className="hidden md:flex items-center gap-2">
                 <button
                   onClick={() => router.push("/upload-resume")}
-                  className="pill bg-white/8 text-xs text-gray-100 border border-white/15 hover:border-(--accent) hover:scale-105 transition"
+                  className="pill bg-white/8 text-xs text-gray-100 border border-white/15 hover:border-[var(--accent)] hover:scale-105 transition"
+                  suppressHydrationWarning
                 >
                   Upload Resume
                 </button>
                 <button
                   onClick={() => router.push("/candidates")}
-                  className="pill bg-white/3 text-xs text-gray-100 border border-white/10 hover:border-(--accent) hover:scale-105 transition"
+                  className="pill bg-white/3 text-xs text-gray-100 border border-white/10 hover:border-[var(--accent)] hover:scale-105 transition"
+                  suppressHydrationWarning
                 >
                   View Candidates
                 </button>
               </div>
-
-              {/* Notifications */}
-              <button
-                type="button"
-                className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 hover:bg-white/10 transition"
-              >
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-(--accent)" />
-                <span className="sr-only">Notifications</span>
-                <span className="text-xs">◎</span>
-              </button>
 
               {/* Avatar */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setAvatarOpen((v) => !v)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-xs font-semibold hover:border-(--accent) transition"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-xs font-semibold hover:border-[var(--accent)] transition"
+                  suppressHydrationWarning
                 >
                   {(user?.name || "HR").slice(0, 2).toUpperCase()}
                 </button>
