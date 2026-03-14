@@ -8,101 +8,95 @@ datasource db {
 }
 
 model Candidate {
-  id              String   @id @default(cuid())
-  name            String
-  email           String   @unique
-  phone           String?
-  skills          String   // Stored as comma separated
-  experienceYears Int      @default(0)
-  location        String?
-  education       String?
-  resumeText      String   // Using String since SQLite text is just String in prisma
-  resumeFileUrl   String?  // Path to the original uploaded PDF file
-  resumeHash      String?
-  contentHash     String?
-  resumeEmbedding Json?
-  duplicateFlag   Boolean  @default(false)
-  pipelineStatus  String   @default("Applied")
-  linkedin        String?
-  github          String?
-  portfolio       String?
-  website         String?
-  twitter         String?
-  summary         String?  // Professional summary extract
-  
-  // New Enhanced Fields
-  candidateScore  Int      @default(0)  // 0-100 score based on job match
-  rating          Int?                  // 1-5 star rating by recruiter
-  employmentHistory String?            // JSON: [{"company":"X","role":"Y","duration":"1-2 years"}]
-  certifications  String?              // Comma separated: AWS, Docker, etc.
-  languages       String?              // Comma separated: English, Spanish, etc.
-  salaryExpectation Int?               // Expected salary in dollars
-  availability    String   @default("Available") // Available, 2 weeks notice, 1 month, etc.
-  interviewNotes  String?              // Notes after interview
-  feedback        String?              // HR/Manager feedback
-  rejectionReason String?              // Why candidate was rejected
-  source          String   @default("Email")  // Ingestion source: Email, Upload, etc.
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // Resume Deduplication Relations
-  resumes         Resume[]
+  id                String             @id @default(cuid())
+  name              String
+  email             String             @unique
+  phone             String?
+  skills            String
+  experienceYears   Int                @default(0)
+  location          String?
+  education         String?
+  resumeText        String
+  resumeFileUrl     String?
+  resumePdfData     String?  // Base64-encoded PDF
+  resumeHash        String?
+  contentHash       String?
+  resumeEmbedding   Json?
+  duplicateFlag     Boolean            @default(false)
+  pipelineStatus    String             @default("Applied")
+  linkedin          String?
+  github            String?
+  portfolio         String?
+  website           String?
+  twitter           String?
+  summary           String?
+  candidateScore    Int                @default(0)
+  rating            Int?
+  employmentHistory String?
+  certifications    String?
+  languages         String?
+  salaryExpectation Int?
+  availability      String             @default("Available")
+  interviewNotes    String?
+  feedback          String?
+  rejectionReason   String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  source            String             @default("Email")
   deduplicationLogs DeduplicationLog[]
+  resumes           Resume[]
 
   @@index([resumeHash])
   @@index([contentHash])
 }
 
 model EmailSettings {
-  id              String   @id @default(cuid())
-  gmailClientId   String
+  id                String    @id @default(cuid())
+  gmailClientId     String
   gmailClientSecret String
   gmailRefreshToken String
-  isConnected     Boolean  @default(false)
-  lastSyncAt      DateTime?
-  lastSyncStatus  String?  // "success" | "error" | "running"
-  lastSyncMessage String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isConnected       Boolean   @default(false)
+  lastSyncAt        DateTime?
+  lastSyncStatus    String?
+  lastSyncMessage   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model Resume {
-  id              String   @id @default(cuid())
-  candidateId     String
-  candidate       Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  documentPath    String
-  extractedData   Json     // JSONB: ResumeData structure
-  uploadedAt      DateTime @default(now())
-  uploadedBy      String?
-  version         Int      @default(1)
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // Relations for deduplication logs
-  newResumeInLogs DeduplicationLog[] @relation("newResume")
+  id                  String             @id @default(cuid())
+  candidateId         String
+  documentPath        String
+  extractedData       Json
+  uploadedAt          DateTime           @default(now())
+  uploadedBy          String?
+  version             Int                @default(1)
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
   similarResumeInLogs DeduplicationLog[] @relation("mostSimilarResume")
-  
+  newResumeInLogs     DeduplicationLog[] @relation("newResume")
+  candidate           Candidate          @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
   @@index([candidateId])
   @@index([isActive])
 }
 
 model DeduplicationLog {
-  id                    String   @id @default(cuid())
-  candidateId           String
-  candidate             Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  newResumeId           String
-  newResume             Resume @relation("newResume", fields: [newResumeId], references: [id], onDelete: Cascade)
-  mostSimilarResumeId   String?
-  mostSimilarResume     Resume? @relation("mostSimilarResume", fields: [mostSimilarResumeId], references: [id], onDelete: SetNull)
-  similarityScore       Float
-  differencePercentage  Float
-  decision              String   // "NEW_ENTRY" or "DUPLICATE"
-  timestamp             DateTime @default(now())
-  userId                String?
-  createdAt             DateTime @default(now())
-  
+  id                   String    @id @default(cuid())
+  candidateId          String
+  newResumeId          String
+  mostSimilarResumeId  String?
+  similarityScore      Float
+  differencePercentage Float
+  decision             String
+  timestamp            DateTime  @default(now())
+  userId               String?
+  createdAt            DateTime  @default(now())
+  candidate            Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  mostSimilarResume    Resume?   @relation("mostSimilarResume", fields: [mostSimilarResumeId], references: [id])
+  newResume            Resume    @relation("newResume", fields: [newResumeId], references: [id], onDelete: Cascade)
+
   @@index([candidateId])
   @@index([timestamp])
 }

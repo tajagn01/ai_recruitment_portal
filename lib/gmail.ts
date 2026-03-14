@@ -57,7 +57,7 @@ function isResumeAttachment(filename: string, mimeType: string): boolean {
  * not the entire inbox history.
  */
 function buildSearchQuery(days = 1): string {
-  return `is:unread has:attachment newer_than:${days}d`;
+  return `is:unread has:attachment newer_than:${days}d in:anywhere`;
 }
 
 export async function getUnreadEmailsWithAttachments(days = 1): Promise<EmailMessage[]> {

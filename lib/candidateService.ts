@@ -4,6 +4,7 @@ import type { ParsedCandidate } from './resumeParser';
 export interface CandidateInput extends ParsedCandidate {
   resumePath: string;
   resumeText: string;
+  resumePdfData?: string; // base64-encoded PDF
   source?: string;
 }
 
@@ -54,6 +55,7 @@ export async function upsertCandidate(
         education: input.education ?? undefined,
         resumeFileUrl: input.resumePath,
         resumeText: input.resumeText,
+        resumePdfData: input.resumePdfData ?? undefined,
         pipelineStatus: 'Applied',
         updatedAt: new Date(),
       },
@@ -73,6 +75,7 @@ export async function upsertCandidate(
       education: input.education ?? undefined,
       resumeFileUrl: input.resumePath,
       resumeText: input.resumeText,
+      resumePdfData: input.resumePdfData ?? undefined,
       source,
       pipelineStatus: 'Applied',
       candidateScore: 0,

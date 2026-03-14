@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import pdfParse from 'pdf-parse';
 
 export interface ParsedCandidate {
   name: string | null;
@@ -31,11 +32,9 @@ export async function extractTextFromFile(filePath: string): Promise<string> {
 }
 
 async function extractFromPdf(filePath: string): Promise<string> {
-  const { PDFParse } = await import('pdf-parse');
   const buffer = fs.readFileSync(filePath);
-  const parser = new (PDFParse as any)({ data: new Uint8Array(buffer) });
-  const pages: { text: string }[] = await parser.getText();
-  return pages.map((p: { text: string }) => p.text).join('\n');
+  const result = await pdfParse(buffer);
+  return result.text;
 }
 
 async function extractFromDocx(filePath: string): Promise<string> {
@@ -81,7 +80,7 @@ ${resumeText}
 export async function parseResumeWithAI(resumeText: string): Promise<ParsedCandidate> {
   const genAI = getGeminiClient();
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       temperature: 0,

@@ -17,6 +17,8 @@ import {
   Clock,
   AlertCircle,
   Loader2,
+  Play,
+  Square,
 } from "lucide-react";
 
 const fadeIn = {
@@ -84,12 +86,19 @@ export default function HrProfilePage() {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [lastSyncMessage, setLastSyncMessage] = useState("");
 
+  // ── Background worker ──────────────────────────────────────────────────────
+  const [workerRunning, setWorkerRunning] = useState(false);
+  const [workerLoading, setWorkerLoading] = useState(false);
+
   // Load current settings on mount
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/email-settings");
-        const data = await res.json();
+        const [settingsRes, workerRes] = await Promise.all([
+          fetch("/api/email-settings"),
+          fetch("/api/email-worker"),
+        ]);
+        const data = await settingsRes.json();
         if (data.settings) {
           setGmailForm({
             gmailClientId: data.settings.gmailClientId,
@@ -101,6 +110,8 @@ export default function HrProfilePage() {
           setLastSyncAt(data.settings.lastSyncAt);
           setLastSyncMessage(data.settings.lastSyncMessage || "");
         }
+        const workerData = await workerRes.json();
+        setWorkerRunning(workerData.running);
       } catch { /* silent */ }
     }
     load();
@@ -176,6 +187,32 @@ export default function HrProfilePage() {
       setGmailError(err.message);
       setSyncing(false);
       setSyncStatus("error");
+    }
+  };
+
+  const onStartWorker = async () => {
+    setWorkerLoading(true);
+    try {
+      const res = await fetch("/api/email-worker", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) setWorkerRunning(true);
+      else setGmailError(data.error || "Failed to start worker");
+    } catch (err) {
+      setGmailError(err.message);
+    } finally {
+      setWorkerLoading(false);
+    }
+  };
+
+  const onStopWorker = async () => {
+    setWorkerLoading(true);
+    try {
+      await fetch("/api/email-worker", { method: "DELETE" });
+      setWorkerRunning(false);
+    } catch (err) {
+      setGmailError(err.message);
+    } finally {
+      setWorkerLoading(false);
     }
   };
 
@@ -429,6 +466,35 @@ export default function HrProfilePage() {
                   </motion.button>
                 )}
 
+                {/* Background worker */}
+                {gmailConnected && (
+                  workerRunning ? (
+                    <motion.button
+                      type="button"
+                      onClick={onStopWorker}
+                      disabled={workerLoading}
+                      className="rounded-full border-2 border-red-500/40 text-red-300 font-bold text-sm px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 hover:border-red-400 hover:text-red-200 transition-colors"
+                      whileHover={{ scale: workerLoading ? 1 : 1.03 }}
+                      whileTap={{ scale: workerLoading ? 1 : 0.97 }}
+                    >
+                      {workerLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4 fill-current" />}
+                      <span>{workerLoading ? "Stopping…" : "Stop Worker"}</span>
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      type="button"
+                      onClick={onStartWorker}
+                      disabled={workerLoading}
+                      className="rounded-full border-2 border-green-500/40 text-green-300 font-bold text-sm px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 hover:border-green-400 hover:text-green-200 transition-colors"
+                      whileHover={{ scale: workerLoading ? 1 : 1.03 }}
+                      whileTap={{ scale: workerLoading ? 1 : 0.97 }}
+                    >
+                      {workerLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                      <span>{workerLoading ? "Starting…" : "Start Worker"}</span>
+                    </motion.button>
+                  )
+                )}
+
                 {/* Disconnect */}
                 {gmailConnected && (
                   <button
@@ -505,6 +571,14 @@ export default function HrProfilePage() {
                 {gmailConnected
                   ? <span className="font-semibold text-green-400 flex items-center gap-1"><Wifi className="w-3.5 h-3.5" />Connected</span>
                   : <span className="font-semibold text-gray-500 flex items-center gap-1"><WifiOff className="w-3.5 h-3.5" />Not set up</span>
+                }
+              </div>
+              <div className="divider-line" />
+              <div className="flex items-center justify-between py-2">
+                <span className="text-gray-400">Worker</span>
+                {workerRunning
+                  ? <span className="font-semibold text-green-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />Running</span>
+                  : <span className="font-semibold text-gray-500">Stopped</span>
                 }
               </div>
             </div>

@@ -7,6 +7,7 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import * as dotenv from 'dotenv';
 
 // Load env variables before importing any module that needs them
@@ -90,11 +91,19 @@ async function processEmail(email: EmailMessage): Promise<void> {
       continue;
     }
 
+    let resumePdfData: string | undefined;
+    try {
+      resumePdfData = fs.readFileSync(localPath).toString('base64');
+    } catch {
+      log('WARN', `Could not read PDF for base64 encoding: ${localPath}`);
+    }
+
     try {
       const result = await upsertCandidate({
         ...parsed,
         resumePath: localPath,
         resumeText,
+        resumePdfData,
         source: 'Email',
       });
 
@@ -133,10 +142,14 @@ async function processEmails(): Promise<void> {
   for (const email of emails) {
     try {
       await processEmail(email);
-      // Mark as read only after successful processing
-      await markEmailAsRead(email.id);
     } catch (err) {
       log('ERROR', `Unexpected error processing email ID ${email.id}: ${(err as Error).message}`);
+    }
+    // Mark as read — requires gmail.modify scope; skip silently if not granted
+    try {
+      await markEmailAsRead(email.id);
+    } catch {
+      log('WARN', `Could not mark email ${email.id} as read — token may only have gmail.readonly scope`);
     }
   }
 }
