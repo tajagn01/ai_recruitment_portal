@@ -17,7 +17,7 @@ export async function POST() {
   // Mark sync as running
   await prisma.emailSettings.update({
     where: { id: settings.id },
-    data: { lastSyncStatus: 'running', lastSyncMessage: 'Sync started...' },
+    data: { lastSyncStatus: 'running', lastSyncMessage: '' },
   });
 
   const workerPath = path.resolve(process.cwd(), 'scripts/email-worker.ts');
@@ -29,16 +29,26 @@ export async function POST() {
     GMAIL_REFRESH_TOKEN: settings.gmailRefreshToken,
   };
 
-  // Run the worker in the background; update status when it finishes
+  // Run the worker; keep stdio piped so we can stream logs live
   const child = spawn('npx', ['tsx', workerPath], {
     env,
     cwd: process.cwd(),
-    detached: true,
     stdio: 'pipe',
   });
 
   let output = '';
-  child.stdout.on('data', (d) => { output += d.toString(); });
+
+  const updateLive = async (logs) => {
+    await prisma.emailSettings.update({
+      where: { id: settings.id },
+      data: { lastSyncMessage: logs.slice(-2000) },
+    }).catch(() => {});
+  };
+
+  child.stdout.on('data', (d) => {
+    output += d.toString();
+    updateLive(output);
+  });
   child.stderr.on('data', (d) => { output += d.toString(); });
 
   child.on('close', async (code) => {
@@ -47,12 +57,10 @@ export async function POST() {
       data: {
         lastSyncStatus: code === 0 ? 'success' : 'error',
         lastSyncAt: new Date(),
-        lastSyncMessage: output.slice(-500) || (code === 0 ? 'Completed successfully' : 'Worker exited with errors'),
+        lastSyncMessage: output.slice(-2000) || (code === 0 ? 'Completed successfully' : 'Worker exited with errors'),
       },
     });
   });
-
-  child.unref();
 
   return NextResponse.json({
     success: true,

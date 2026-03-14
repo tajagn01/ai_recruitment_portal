@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import pdfParse from 'pdf-parse';
+import GEMINI_KEYS from './gemini-keys';
 
 export interface ParsedCandidate {
   name: string | null;
@@ -48,12 +49,8 @@ async function extractFromDocx(filePath: string): Promise<string> {
 // AI parsing — Gemini
 // ---------------------------------------------------------------------------
 
-function getGeminiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not set in environment variables');
-  }
-  return new GoogleGenerativeAI(apiKey);
+function getApiKeys(): string[] {
+  return GEMINI_KEYS;
 }
 
 const PARSE_PROMPT = (resumeText: string) => `
@@ -78,29 +75,40 @@ ${resumeText}
 `;
 
 export async function parseResumeWithAI(resumeText: string): Promise<ParsedCandidate> {
-  const genAI = getGeminiClient();
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0,
-    },
-  });
+  const keys = getApiKeys();
+  const trimmedText = resumeText.slice(0, 12000);
+  let lastError: Error = new Error('No API keys available');
 
-  const trimmedText = resumeText.slice(0, 12000); // stay within token limits
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      const genAI = new GoogleGenerativeAI(keys[i]);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      });
 
-  const result = await model.generateContent(PARSE_PROMPT(trimmedText));
-  const content = result.response.text();
+      const result = await model.generateContent(PARSE_PROMPT(trimmedText));
+      const content = result.response.text();
+      if (!content) throw new Error('Empty response from Gemini');
 
-  if (!content) throw new Error('Empty response from Gemini');
+      const clean = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(clean) as ParsedCandidate;
+      if (!Array.isArray(parsed.skills)) parsed.skills = [];
 
-  // Strip any accidental markdown fences just in case
-  const clean = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-  const parsed = JSON.parse(clean) as ParsedCandidate;
-
-  if (!Array.isArray(parsed.skills)) {
-    parsed.skills = [];
+      if (keys.length > 1) console.log(`[INFO] Used Gemini key #${i + 1} of ${keys.length}`);
+      return parsed;
+    } catch (err) {
+      lastError = err as Error;
+      const msg = lastError.message;
+      // Only rotate to next key on quota/rate limit errors
+      if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+        console.log(`[WARN] Gemini key #${i + 1} quota exhausted — trying next key...`);
+        continue;
+      }
+      // Any other error (auth, network, etc.) — throw immediately
+      throw lastError;
+    }
   }
 
-  return parsed;
+  throw new Error(`All ${keys.length} Gemini API key(s) exhausted. ${lastError.message}`);
 }
