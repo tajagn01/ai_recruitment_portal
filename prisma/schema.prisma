@@ -41,7 +41,8 @@ model Candidate {
   interviewNotes  String?              // Notes after interview
   feedback        String?              // HR/Manager feedback
   rejectionReason String?              // Why candidate was rejected
-  
+  source          String   @default("Email")  // Ingestion source: Email, Upload, etc.
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
@@ -51,6 +52,19 @@ model Candidate {
 
   @@index([resumeHash])
   @@index([contentHash])
+}
+
+model EmailSettings {
+  id              String   @id @default(cuid())
+  gmailClientId   String
+  gmailClientSecret String
+  gmailRefreshToken String
+  isConnected     Boolean  @default(false)
+  lastSyncAt      DateTime?
+  lastSyncStatus  String?  // "success" | "error" | "running"
+  lastSyncMessage String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model Resume {
