@@ -107,26 +107,45 @@ export async function POST(req) {
   const terms = extractTerms(query);
   const minExp = extractExpYears(query);
 
-  try {
-    const orFilters = [
-      { name: { contains: query, mode: "insensitive" } },
-      { skills: { contains: query, mode: "insensitive" } },
-      { location: { contains: query, mode: "insensitive" } },
-      { education: { contains: query, mode: "insensitive" } },
-      { summary: { contains: query, mode: "insensitive" } },
-      { resumeText: { contains: query, mode: "insensitive" } },
-    ];
+  // Filter out tokens that are only experience-related (numbers, "year+", "yr+")
+  // These won't match any text field in the DB and will cause OR to fail
+  const meaningfulTerms = terms.filter(
+    (t) => !/^\d+\+?$/.test(t) && t !== "year+" && t !== "yr+"
+  );
 
-    for (const term of terms) {
-      orFilters.push({ skills: { contains: term, mode: "insensitive" } });
-      orFilters.push({ name: { contains: term, mode: "insensitive" } });
-      orFilters.push({ location: { contains: term, mode: "insensitive" } });
-      orFilters.push({ summary: { contains: term, mode: "insensitive" } });
+  try {
+    const where = {};
+
+    if (meaningfulTerms.length > 0) {
+      const orFilters = [
+        { name: { contains: query, mode: "insensitive" } },
+        { skills: { contains: query, mode: "insensitive" } },
+        { location: { contains: query, mode: "insensitive" } },
+        { education: { contains: query, mode: "insensitive" } },
+        { summary: { contains: query, mode: "insensitive" } },
+        { resumeText: { contains: query, mode: "insensitive" } },
+      ];
+
+      for (const term of meaningfulTerms) {
+        orFilters.push({ skills: { contains: term, mode: "insensitive" } });
+        orFilters.push({ name: { contains: term, mode: "insensitive" } });
+        orFilters.push({ location: { contains: term, mode: "insensitive" } });
+        orFilters.push({ summary: { contains: term, mode: "insensitive" } });
+      }
+
+      where.OR = orFilters;
     }
 
-    const where = { OR: orFilters };
     if (minExp !== null) {
       where.experienceYears = { gte: minExp };
+    }
+
+    // Nothing to filter on — ask for clarification
+    if (!where.OR && where.experienceYears === undefined) {
+      return NextResponse.json({
+        reply: "Please specify a skill, technology, or experience level to search for.",
+        candidates: [],
+      });
     }
 
     const candidates = await prisma.candidate.findMany({

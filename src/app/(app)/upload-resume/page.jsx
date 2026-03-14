@@ -1,12 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Upload as UploadIcon, 
-  FileText, 
-  CheckCircle2, 
+import {
+  Upload as UploadIcon,
+  FileText,
+  CheckCircle2,
   AlertCircle,
   X,
   Sparkles,
@@ -16,8 +15,18 @@ import {
   GraduationCap,
   MapPin,
   Code,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
+
+const DUPLICATE_REASON_LABELS = {
+  RESUME_HASH: "Identical file",
+  CONTENT_HASH: "Identical content",
+  CONTENT_SIMILARITY: "Very similar content",
+  IDENTITY_MATCH: "Same candidate identity",
+  EMBEDDING_SIMILARITY: "Semantically similar",
+  PHONE_MATCH: "Same phone number",
+};
 
 const accept = [".pdf", ".docx"];
 
@@ -27,7 +36,6 @@ const fadeIn = {
 };
 
 export default function UploadResumePage() {
-  const router = useRouter();
   const [files, setFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -84,13 +92,10 @@ export default function UploadResumePage() {
       setDedupeResults(dedupe);
       if (candidates.length > 0) {
         setSuccessMessage(`Successfully uploaded ${candidates.length} resume${candidates.length > 1 ? "s" : ""}!`);
+      } else if (dedupe.some(d => d.skippedAsDuplicate)) {
+        setSuccessMessage("");
       }
       setFiles([]);
-      if (candidates.length === 1 && candidates[0]?.id) {
-        setTimeout(() => {
-          router.push(`/candidate/${candidates[0].id}`);
-        }, 1500);
-      }
     } catch (e) {
       setError(e?.message || "Upload failed. Please try again.");
     } finally {
@@ -361,6 +366,51 @@ export default function UploadResumePage() {
               Our AI automatically extracts structured data from resumes and creates searchable candidate profiles in your database.
             </p>
           </motion.aside>
+
+          {/* Duplicate Warnings */}
+          <AnimatePresence>
+            {dedupeResults.filter(d => d.skippedAsDuplicate).length > 0 && (
+              <motion.aside
+                className="glass-card rounded-3xl p-6 border border-yellow-500/30"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                  <h3 className="text-lg font-bold text-yellow-400">Duplicate Detected</h3>
+                </div>
+                <ul className="space-y-3">
+                  {dedupeResults.filter(d => d.skippedAsDuplicate).map((d, idx) => (
+                    <motion.li
+                      key={`dup-${idx}`}
+                      className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-white truncate">{d.name}</p>
+                          <p className="text-xs text-yellow-400 mt-1">
+                            {DUPLICATE_REASON_LABELS[d.duplicateReason] || d.duplicateReason}
+                            {d.similarityPercentage != null && ` — ${Math.round(d.similarityPercentage)}% similar`}
+                          </p>
+                          {d.matchedCandidateEmail && (
+                            <p className="text-xs text-gray-400 mt-1 truncate">
+                              Matches: {d.matchedCandidateEmail}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">Resume was not uploaded — already exists in the system.</p>
+                        </div>
+                      </div>
+                    </motion.li>
+                  ))}
+                </ul>
+              </motion.aside>
+            )}
+          </AnimatePresence>
 
           {/* Parsed Results */}
           <AnimatePresence>

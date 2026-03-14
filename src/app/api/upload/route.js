@@ -485,6 +485,45 @@ export async function POST(req) {
                     where: { email: emailValue },
                 });
 
+                // If same email already exists, check if resume is identical or >= 80% similar
+                if (existingCandidate) {
+                    const isSameFile = existingCandidate.resumeHash && existingCandidate.resumeHash === resumeHash;
+                    const isSameContent = existingCandidate.contentHash && existingCandidate.contentHash === contentHash;
+                    if (isSameFile || isSameContent) {
+                        console.info(`[INFO] Same-email candidate uploaded identical resume. Skipping.`);
+                        dedupeResults.push({
+                            id: existingCandidate.id,
+                            email: emailValue,
+                            name: parsedData.name || "Unknown",
+                            updated: false,
+                            skippedAsDuplicate: true,
+                            matchedCandidateId: existingCandidate.id,
+                            matchedCandidateEmail: existingCandidate.email,
+                            similarityPercentage: 100,
+                            duplicateReason: isSameFile ? 'RESUME_HASH' : 'CONTENT_HASH',
+                        });
+                        continue;
+                    }
+                    if (existingCandidate.resumeText) {
+                        const selfSimilarity = calculateTextSimilarity(normalizeResumeText(existingCandidate.resumeText), normalizedText);
+                        if (selfSimilarity >= 80) {
+                            console.info(`[INFO] Same-email candidate re-uploaded ${Math.round(selfSimilarity)}% similar resume. Skipping.`);
+                            dedupeResults.push({
+                                id: existingCandidate.id,
+                                email: emailValue,
+                                name: parsedData.name || "Unknown",
+                                updated: false,
+                                skippedAsDuplicate: true,
+                                matchedCandidateId: existingCandidate.id,
+                                matchedCandidateEmail: existingCandidate.email,
+                                similarityPercentage: Math.round(selfSimilarity),
+                                duplicateReason: 'CONTENT_SIMILARITY',
+                            });
+                            continue;
+                        }
+                    }
+                }
+
                 const existingPhoneMatch = normalizePhone(parsedData.phone);
                 if (existingPhoneMatch) {
                     const phoneMatch = existingCandidates.find(candidate => normalizePhone(candidate.phone) === existingPhoneMatch);

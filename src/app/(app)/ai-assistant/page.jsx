@@ -85,7 +85,9 @@ export default function AiAssistantPage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [candidates, setCandidates] = useState([]);
+  // allCandidates = full DB list for stats; searchResults = null until first search
+  const [allCandidates, setAllCandidates] = useState([]);
+  const [searchResults, setSearchResults] = useState(null);
   const chatScrollRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -93,7 +95,7 @@ export default function AiAssistantPage() {
   useEffect(() => {
     fetch("/api/candidates")
       .then((r) => r.json())
-      .then((data) => setCandidates(Array.isArray(data) ? data : data.candidates || []))
+      .then((data) => setAllCandidates(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
 
@@ -105,17 +107,20 @@ export default function AiAssistantPage() {
     });
   }, [messages]);
 
+  // After a search, stats show search results; before any search, show nothing
+  const displayList = searchResults ?? [];
+
   const stats = useMemo(() => {
-    const count = candidates.length;
+    const count = displayList.length;
     const topSkills = new Map();
-    for (const c of candidates) {
+    for (const c of displayList) {
       for (const s of (c.skills || "").split(",").map((x) => x.trim()).filter(Boolean)) {
         topSkills.set(s, (topSkills.get(s) || 0) + 1);
       }
     }
     const skills = [...topSkills.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s]) => s);
     return { count, skills };
-  }, [candidates]);
+  }, [displayList]);
 
   const sendQuery = async (query) => {
     if (!query.trim() || loading) return;
@@ -129,9 +134,7 @@ export default function AiAssistantPage() {
         body: JSON.stringify({ query: query.trim() }),
       });
       const data = await res.json();
-      if (Array.isArray(data.candidates) && data.candidates.length > 0) {
-        setCandidates(data.candidates);
-      }
+      setSearchResults(Array.isArray(data.candidates) ? data.candidates : []);
       setMessages((m) => [
         ...m,
         { role: "assistant", content: data.reply || "Here are the matching candidates I found for you." },
@@ -295,7 +298,7 @@ export default function AiAssistantPage() {
               <div>
                 <h3 className="text-lg font-bold">Search Results</h3>
                 <p className="text-xs text-gray-400">
-                  {stats.count === 0 ? "No matches yet" : `${stats.count} candidate${stats.count > 1 ? "s" : ""} found`}
+                  {searchResults === null ? "Ask AI to search" : stats.count === 0 ? "No matches" : `${stats.count} candidate${stats.count > 1 ? "s" : ""} found`}
                 </p>
               </div>
             </div>
@@ -338,7 +341,7 @@ export default function AiAssistantPage() {
               </div>
             )}
 
-            {candidates.length === 0 && (
+            {searchResults === null && (
               <div className="text-center py-8">
                 <div className="w-16 h-16 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
                   <Sparkles className="w-8 h-8 text-gray-400" />
@@ -350,12 +353,17 @@ export default function AiAssistantPage() {
                 </p>
               </div>
             )}
+            {searchResults !== null && searchResults.length === 0 && (
+              <div className="text-center py-4">
+                <p className="text-sm text-gray-400">No candidates matched your search.</p>
+              </div>
+            )}
           </motion.section>
 
           {/* Candidates List */}
           <AnimatePresence>
-            {candidates.length > 0 && (
-              <motion.section 
+            {searchResults !== null && searchResults.length > 0 && (
+              <motion.section
                 className="glass-card rounded-3xl p-6"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -363,7 +371,7 @@ export default function AiAssistantPage() {
               >
                 <h3 className="text-sm font-bold text-gray-300 mb-4 uppercase tracking-wider">Matched Candidates</h3>
                 <div className="space-y-3">
-                  {candidates.map((c, idx) => {
+                  {searchResults.map((c, idx) => {
                     const skills = (c.skills || "")
                       .split(",")
                       .map((s) => s.trim())

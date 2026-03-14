@@ -6,6 +6,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     const [file, setFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState("");
+    const [duplicateWarnings, setDuplicateWarnings] = useState([]);
 
     if (!isOpen) return null;
 // fsoihfweiof
@@ -27,8 +28,13 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                 headers: { "Content-Type": "multipart/form-data" },
             });
             if (res.data.success) {
-                onUploadSuccess(res.data.candidate);
-                onClose();
+                const duplicates = (res.data.dedupeResults || []).filter(d => d.skippedAsDuplicate);
+                if (duplicates.length > 0) {
+                    setDuplicateWarnings(duplicates);
+                } else {
+                    onUploadSuccess(res.data.candidate);
+                    onClose();
+                }
             }
         } catch (err) {
             console.error(err);
@@ -49,6 +55,35 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
 
                 {/* Content */}
                 <div className="p-8">
+                    {duplicateWarnings.length > 0 && (
+                        <div className="mb-6 p-4 bg-yellow-50 border-2 border-yellow-300 text-yellow-800 rounded-xl">
+                            <div className="flex items-center gap-2 mb-3">
+                                <svg className="w-5 h-5 text-yellow-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                <span className="font-bold text-yellow-700">Duplicate Resume Detected</span>
+                            </div>
+                            {duplicateWarnings.map((d, idx) => (
+                                <div key={idx} className="text-sm mb-2 last:mb-0">
+                                    <p className="font-semibold">{d.name}</p>
+                                    {d.similarityPercentage != null && (
+                                        <p className="text-yellow-700">{Math.round(d.similarityPercentage)}% similar to an existing candidate</p>
+                                    )}
+                                    {d.matchedCandidateEmail && (
+                                        <p className="text-yellow-600">Matches: {d.matchedCandidateEmail}</p>
+                                    )}
+                                    <p className="text-yellow-600 mt-1">This resume was not uploaded — it already exists in the system.</p>
+                                </div>
+                            ))}
+                            <button
+                                onClick={onClose}
+                                className="mt-3 text-xs font-semibold text-yellow-700 underline"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    )}
+
                     {error && (
                         <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 text-red-700 rounded-xl flex items-start">
                             <svg className="w-5 h-5 mr-3 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
